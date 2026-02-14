@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import norm, cauchy, laplace, uniform, poisson
 
+np.random.seed(42)
 # Параметры
 n_values = [10, 100, 1000]
 
@@ -21,7 +22,7 @@ distributions = {
         'gen_args': (),
         'pdf_func': cauchy.pdf,
         'pdf_args': (0, 1),
-        'x_range': (-35, 35),
+        'x_range': (-20, 20),
         'discrete': False,
         'title': 'Коши C(0,1)'
     },
@@ -81,7 +82,6 @@ for name, dist in distributions.items():
             ax.plot(x_vals, pdf_vals, 'r-', label='Теоретическая плотность')
             ax.set_xlabel('x')
         
-        ax.set_xlim(dist['x_range'])
         ax.set_ylabel('Плотность')
         ax.set_title(f'n = {n}')
         ax.legend(loc='upper right', fontsize=7)
