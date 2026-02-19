@@ -67,12 +67,12 @@ for dist in distributions:
             mean_val = np.mean(arr)
             var_val = np.var(arr, ddof=0)   # генеральная дисперсия
             std_val = np.sqrt(var_val)
-            # Округление до одного знака после запятой
-            mean_round = round(mean_val, 1)
-            std_round = round(std_val, 1)
+            # Форматирование с одним знаком после запятой и замена "-0.0" на "0.0"
+            mean_str = f"{mean_val:.1f}".replace("-0.0", "0.0")
+            std_str = f"{std_val:.1f}".replace("-0.0", "0.0")
             # Запись в CSV
             with open(csv_filename, mode='a', newline='', encoding='utf-8') as file:
                 writer = csv.writer(file, delimiter=';')
-                writer.writerow([dname, n, sname_rus, mean_round, std_round])
+                writer.writerow([dname, n, sname_rus, mean_str, std_str])
 
 print(f"\nРезультаты сохранены в файл {csv_filename}")
