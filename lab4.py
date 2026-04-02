@@ -39,7 +39,7 @@ distributions = [
         "rvs": lambda n: np.random.standard_cauchy(n),
         "cdf": lambda x: cauchy.cdf(x, 0, 1),
         "pdf": lambda x: cauchy.pdf(x, 0, 1),
-        "xlim": (-20, 20),
+        "xlim": (-100, 100),
         "bw_method": robust_silverman_bandwidth,
         "color": "C1"
     },
@@ -58,7 +58,8 @@ distributions = [
         "cdf": lambda x: poisson.cdf(np.floor(x), 5),
         "pmf": lambda k: poisson.pmf(k, 5),
         "xlim": (0, 10),
-        "discrete": True,
+        "bw_method": silverman_bandwidth,          # добавлен метод для KDE
+        "discrete": True,                          # флаг остаётся для корректной отрисовки теоретической "плотности"
         "color": "C3"
     },
     {
@@ -85,10 +86,7 @@ for dist in distributions:
     for idx, n in enumerate(sample_sizes):
         sample = dist["rvs"](n)
 
-        # ----- Верхний ряд: плотность -----
-        ax_dens = axes[0, idx]
-
-        # Гистограмма
+        # ----- Подготовка параметров гистограммы -----
         hist_kwargs = {'density': True, 'alpha': 0.3, 'color': 'gray', 'label': 'Гистограмма'}
         if name == "Коши":
             if n <= 30:
@@ -100,20 +98,24 @@ for dist in distributions:
             hist_kwargs['range'] = hist_range
             hist_kwargs['bins'] = bins
         elif is_discrete:
+            # для Пуассона: бины шириной 1, центрированные по целым числам
             bins = np.arange(np.floor(xlim[0]) - 0.5, np.ceil(xlim[1]) + 1.5, 1)
             hist_kwargs['bins'] = bins
+            # диапазон не задаём, он определяется бинами
         else:
             hist_kwargs['bins'] = 'fd'
             hist_kwargs['range'] = xlim
 
+        # ----- Верхний ряд: плотность -----
+        ax_dens = axes[0, idx]
+        # Гистограмма
         ax_dens.hist(sample, **hist_kwargs)
 
-        # Ядерная оценка (только для непрерывных)
-        if not is_discrete:
-            bw = dist["bw_method"](sample)
-            x_dens = np.linspace(xlim[0], xlim[1], 500)
-            y_kde = gaussian_kde(x_dens, sample, bw)
-            ax_dens.plot(x_dens, y_kde, 'b-', lw=2, label='Ядерная оценка')
+        # Ядерная оценка (теперь для всех распределений, включая Пуассона)
+        bw = dist["bw_method"](sample)          # для Пуассона теперь есть метод
+        x_dens = np.linspace(xlim[0], xlim[1], 500)
+        y_kde = gaussian_kde(x_dens, sample, bw)
+        ax_dens.plot(x_dens, y_kde, 'b-', lw=2, label='Ядерная оценка')
 
         # Теоретическая плотность/вероятность
         if is_discrete:
@@ -149,14 +151,17 @@ for dist in distributions:
             y_cdf = dist["cdf"](x_cdf)
             ax_cdf.plot(x_cdf, y_cdf, 'r-', lw=2, label='Теоретическая ФР')
 
-        # ЭФР из гистограммы (для непрерывных)
-        if not is_discrete:
-            if name == "Коши":
-                counts, bin_edges = np.histogram(sample, bins=hist_kwargs['bins'], range=hist_kwargs['range'])
-            else:
-                counts, bin_edges = np.histogram(sample, bins='fd', range=xlim)
-            cdf_hist = np.cumsum(counts) / n
-            ax_cdf.step(bin_edges[1:], cdf_hist, where='post', color='orange', linestyle='--', lw=1.5, label='ЭФР из гистограммы')
+        # ЭФР из гистограммы (теперь для всех распределений)
+        # Используем те же параметры, что и при построении гистограммы
+        if name == "Коши":
+            counts, bin_edges = np.histogram(sample, bins=hist_kwargs['bins'], range=hist_kwargs['range'])
+        elif is_discrete:
+            # Для Пуассона: bins уже заданы явно
+            counts, bin_edges = np.histogram(sample, bins=hist_kwargs['bins'])
+        else:
+            counts, bin_edges = np.histogram(sample, bins='fd', range=xlim)
+        cdf_hist = np.cumsum(counts) / n
+        ax_cdf.step(bin_edges[1:], cdf_hist, where='post', color='orange', linestyle='--', lw=1.5, label='ЭФР из гистограммы')
 
         ax_cdf.set_xlim(xlim)
         ax_cdf.set_ylim(0, 1.05)
@@ -169,19 +174,17 @@ for dist in distributions:
     plt.savefig(f'images/{name}.png', dpi=150)
     plt.close()
 
-# ---------- Дополнительный график: влияние ширины окна для равномерного распределения ----------
+# ---------- Дополнительные графики (без изменений) ----------
 sample_uniform = np.random.uniform(-np.sqrt(3), np.sqrt(3), 100)
 x = np.linspace(-4, 4, 500)
 h_silver_uniform = silverman_bandwidth(sample_uniform)
 
 plt.figure(figsize=(8, 5))
 plt.plot(x, uniform.pdf(x, -np.sqrt(3), 2*np.sqrt(3)), 'r-', lw=2, label='Теоретическая плотность')
-
 for scale, style in zip([0.5, 1.0, 2.0], ['--', '-', ':']):
     h = scale * h_silver_uniform
     y_kde = gaussian_kde(x, sample_uniform, h)
     plt.plot(x, y_kde, color='b', linestyle=style, lw=1.5, label=f'KDE, h = {scale:.1f}·h_silver')
-
 plt.xlim(-4, 4)
 plt.xlabel('x')
 plt.ylabel('Плотность')
@@ -192,19 +195,16 @@ plt.tight_layout()
 plt.savefig('images/kde_bandwidth_effect_uniform.png', dpi=150)
 plt.close()
 
-# ---------- Дополнительный график: влияние ширины окна для распределения Лапласа ----------
 sample_laplace = np.random.laplace(0, 1/np.sqrt(2), 100)
 x = np.linspace(-4, 4, 500)
 h_silver_laplace = silverman_bandwidth(sample_laplace)
 
 plt.figure(figsize=(8, 5))
 plt.plot(x, laplace.pdf(x, 0, 1/np.sqrt(2)), 'r-', lw=2, label='Теоретическая плотность')
-
 for scale, style in zip([0.5, 1.0, 2.0], ['--', '-', ':']):
     h = scale * h_silver_laplace
     y_kde = gaussian_kde(x, sample_laplace, h)
     plt.plot(x, y_kde, color='b', linestyle=style, lw=1.5, label=f'KDE, h = {scale:.1f}·h_silver')
-
 plt.xlim(-4, 4)
 plt.xlabel('x')
 plt.ylabel('Плотность')
