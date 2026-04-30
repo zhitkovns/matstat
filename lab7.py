@@ -10,7 +10,7 @@ os.makedirs("images", exist_ok=True)
 n_main = 100
 sample = np.random.normal(0, 1, n_main)
 
-# Оценка параметров ММП
+# Оценка параметров ММП (совпадает с МНК для среднего)
 mu_mle = np.mean(sample)
 sigma_mle = np.std(sample, ddof=0)   # смещённая оценка (деление на n)
 
@@ -20,11 +20,8 @@ print(f"Выборочное СКО (ММП) = {sigma_mle:.4f}")
 
 # ---------- Построение интервалов (равновероятностные) ----------
 k = 8  # число интервалов
-# Вероятностные границы: 0/k, 1/k, ..., k/k
 p_edges = np.linspace(0, 1, k+1)
-# Квантили нормального распределения с параметрами (mu_mle, sigma_mle)
 quantiles = norm.ppf(p_edges, loc=mu_mle, scale=sigma_mle)
-# Ожидаемые частоты (одинаковые)
 expected = n_main / k   # 12.5
 
 # Наблюдаемые частоты
@@ -33,8 +30,7 @@ observed = np.histogram(sample, bins=quantiles)[0]
 # Статистика хи-квадрат
 chi2_stat = np.sum((observed - expected)**2 / expected)
 
-# Степени свободы: df = k - 1 - m, m=2 (оценённые параметры)
-df = k - 1 - 2
+df = k - 1 - 2   # степени свободы: k-1 минус 2 оценённых параметра
 critical = chi2.ppf(0.95, df)
 
 print(f"\nЧисло интервалов k = {k}")
@@ -47,7 +43,21 @@ if chi2_stat < critical:
 else:
     print("Гипотеза о нормальном распределении ОТВЕРГАЕТСЯ")
 
-# Визуализация: гистограмма с правилом sqrt(n)
+# ---------- Таблица для отчёта (интервалы) ----------
+print("\n=== Таблица интервалов ===")
+print("№\tГраницы интервала\t\tni\tnpi\t(ni-npi)^2/(npi)")
+for i in range(k):
+    left = quantiles[i]
+    right = quantiles[i+1]
+    if i == 0:
+        interval_str = f"(-∞, {right:.2f}]"
+    elif i == k-1:
+        interval_str = f"[{left:.2f}, +∞)"
+    else:
+        interval_str = f"[{left:.2f}, {right:.2f}]"
+    print(f"{i+1}\t{interval_str}\t\t{observed[i]}\t{expected:.1f}\t{(observed[i]-expected)**2/expected:.4f}")
+
+# ---------- Визуализация ----------
 plt.figure(figsize=(6,4))
 plt.hist(sample, bins='sqrt', density=True, alpha=0.5, color='gray', label='Выборка')
 x_vals = np.linspace(-3, 3, 200)
@@ -61,12 +71,12 @@ plt.tight_layout()
 plt.savefig('images/main_sample.png', dpi=150)
 plt.close()
 
-# ---------- 2. Исследование чувствительности (мощность) ----------
+# ---------- 2. Исследование мощности критерия ----------
 n_alt = 20
 n_reps = 1000
-k_alt = 4  # чтобы np_i = n/k = 5 ≥5
+k_alt = 4   # чтобы np_i = 5 ≥5
 expected_alt = n_alt / k_alt
-df_alt = k_alt - 1 - 2   # 4-1-2=1
+df_alt = k_alt - 1 - 2   # 1
 
 def test_normality(sample):
     mu = np.mean(sample)
@@ -93,33 +103,31 @@ for _ in range(n_reps):
 power_laplace = reject_laplace / n_reps
 
 print("\n=== Исследование мощности критерия ===")
-print(f"Объём выборки для альтернатив = {n_alt}, число интервалов k = {k_alt}, ожидаемая частота = {expected_alt}")
-print(f"Доля отвергнутых гипотез H0 (равномерное распределение): {power_uniform*100:.2f}%")
-print(f"Доля отвергнутых гипотез H0 (распределение Лапласа): {power_laplace*100:.2f}%")
+print(f"Объём выборки для альтернатив = {n_alt}, k = {k_alt}, ожидаемая частота = {expected_alt}")
+print(f"Доля отвергнутых H0 (равномерное): {power_uniform*100:.2f}%")
+print(f"Доля отвергнутых H0 (Лапласа): {power_laplace*100:.2f}%")
 
-# Визуализация примеров для альтернатив (гистограммы с правилом sqrt(n))
+# Визуализация примеров
 fig, axes = plt.subplots(1, 2, figsize=(10,4))
 samp_unif = np.random.uniform(-np.sqrt(3), np.sqrt(3), n_alt)
 samp_lapl = np.random.laplace(0, 1/np.sqrt(2), n_alt)
 
-ax = axes[0]
-ax.hist(samp_unif, bins='sqrt', density=True, alpha=0.5, color='blue')
+axes[0].hist(samp_unif, bins='sqrt', density=True, alpha=0.5, color='blue')
 x = np.linspace(-2, 2, 200)
-ax.plot(x, uniform.pdf(x, -np.sqrt(3), 2*np.sqrt(3)), 'b-', label='Равномерная плотность')
-ax.set_title(f'Равномерное (n={n_alt})')
-ax.legend()
-ax.grid(alpha=0.3)
+axes[0].plot(x, uniform.pdf(x, -np.sqrt(3), 2*np.sqrt(3)), 'b-', label='Равномерная плотность')
+axes[0].set_title(f'Равномерное (n={n_alt})')
+axes[0].legend()
+axes[0].grid(alpha=0.3)
 
-ax = axes[1]
-ax.hist(samp_lapl, bins='sqrt', density=True, alpha=0.5, color='green')
+axes[1].hist(samp_lapl, bins='sqrt', density=True, alpha=0.5, color='green')
 x = np.linspace(-3, 3, 200)
-ax.plot(x, laplace.pdf(x, 0, 1/np.sqrt(2)), 'g-', label='Лапласа плотность')
-ax.set_title(f'Лапласа (n={n_alt})')
-ax.legend()
-ax.grid(alpha=0.3)
+axes[1].plot(x, laplace.pdf(x, 0, 1/np.sqrt(2)), 'g-', label='Лапласа плотность')
+axes[1].set_title(f'Лапласа (n={n_alt})')
+axes[1].legend()
+axes[1].grid(alpha=0.3)
 
 plt.tight_layout()
 plt.savefig('images/alternative_samples.png', dpi=150)
 plt.close()
 
-print("\nГрафики сохранены в папке images/")
+print("\nГрафики сохранены в images/")
